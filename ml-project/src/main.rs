@@ -1,9 +1,17 @@
 use csv::Reader;
 use std::fs::File;
-use ndarray::{ Array, Array1, Array2 };
+use ndarray::{ Array, Array1, Array2, OwnedRepr, ArrayBase, Dim };
 use linfa::Dataset;
+use plotlib::page::Page;
 use plotlib::repr::Plot;
 use plotlib::style::{PointMarker, PointStyle};
+use plotlib::grid::Grid;
+use plotlib::view::ContinuousView;
+use plotlib::view::View;
+use linfa::prelude::*;
+use linfa_logistic::LogisticRegression;
+
+type MyDataset = DatasetBase<ArrayBase<OwnedRepr<f64>, Dim<[usize; 2]>>, ArrayBase<OwnedRepr<&'static str>, Dim<[usize; 2]>>,>;
 
 fn get_dataset() -> Dataset<f32, i32, ndarray::Dim<[usize;1]>> {
     let mut reader = Reader::from_path("./src/heart.csv").unwrap();
@@ -74,19 +82,18 @@ fn plot_data(dataset: &Dataset<f32, i32, ndarray::Dim<[usize;1]>>) {
     for i in 0..chunks.len() {
         let current_row = chunks.get(i).expect("current row");
         // Daca target pentru fiecare rand este 1, adaug la positive, valoarea corespunzatoare
-        // features trestbps, index 3
+        // trestbps, index 3
+        // chol, index 4
         if let Some(&1) = targets.get(i) {
-            positive.push(( current_row[3], 1 ));
+            positive.push(( current_row[3] as f64, current_row[4] as f64 ));
         } else {
-            negative.push(( current_row[3], 0 ))
+            negative.push(( current_row[3] as f64, current_row[4] as f64 ))
         }
     }
 
     println!("positive {:?}", positive.len());
     println!("negative {:?}", negative.len());
     
-    // Aici imi da eroare pentru ca mie mi-ar trebui f64 in loc de f32 pentru valorile din
-    // current_row
     let plot_positive = Plot::new(positive)
         .point_style(
             PointStyle::new()
@@ -103,6 +110,37 @@ fn plot_data(dataset: &Dataset<f32, i32, ndarray::Dim<[usize;1]>>) {
                 .marker(PointMarker::Square)
                 .colour("#ff0000"),
             );
+
+    let grid = Grid::new(0,0);
+
+    let mut image = ContinuousView::new()
+        .add(plot_positive)
+        .add(plot_negative)
+        .x_range(80.0, 200.0)
+        .y_range(50.0, 550.0)
+        .x_label("TRESTBPX")
+        .y_label("CHOL");
+    image.add_grid(grid);
+
+    Page::single(&image)
+        .save("plot.svg")
+        .expect("Can generate svg for Trestbps to target plot");
+}
+
+fn iterate_with_values( train: &MyDataset, test: &MyDataset, threshold: f64, max_iterations: u64) -> ConfusionMatrix<&'static str> {
+    let model = LogisticRegression::default()
+        .max_iterations(max_iterations)
+        .gradient_tolerance(0.0001)
+        .fit(train)
+        .expect("can train model");
+
+    let validation = model.set_treshold(threshold).predict(test);
+
+    let confusion_matrix = validation
+        .confusion_matrix(test)
+        .expect("Can create confusion matrix");
+
+    confusion_matrix
 }
 
 fn main() {
