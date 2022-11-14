@@ -2,9 +2,8 @@ use csv::Reader;
 use std::fs::File;
 use ndarray::{ Array, Array1, Array2 };
 use linfa::Dataset;
-use linfa_trees::DecisionTree;
-use linfa::prelude::*;
-
+use plotlib::repr::Plot;
+use plotlib::style::{PointMarker, PointStyle};
 
 fn get_dataset() -> Dataset<f32, i32, ndarray::Dim<[usize;1]>> {
     let mut reader = Reader::from_path("./src/heart.csv").unwrap();
@@ -56,18 +55,70 @@ fn get_targets(data: &Vec<Vec<f32>>, target_index: usize ) -> Array1<i32> {
     return Array::from( targets );
 }
 
+fn plot_data(dataset: &Dataset<f32, i32, ndarray::Dim<[usize;1]>>) {
+    let records = dataset.records().clone().into_raw_vec();
+    let _features = dataset.feature_names();
+    //Toate valorile intr-un singur sir
+    println!("{:?} records", records.len());
+
+    // Toate valorile in bucati de cate 13 - atatea sunt pe un singur rand de date
+    // chunks face o lista in care fiecare element este o lista cu 13 elemente
+    let chunks: Vec<&[f32]> = records.chunks(13).collect();
+    println!("{:?} chunks", chunks.len());
+
+    // Targets nu face parte din records
+    let targets = dataset.targets().clone().into_raw_vec();
+    println!("{:?} targets", targets.len());
+    let mut positive = vec![];
+    let mut negative = vec![];
+    for i in 0..chunks.len() {
+        let current_row = chunks.get(i).expect("current row");
+        // Daca target pentru fiecare rand este 1, adaug la positive, valoarea corespunzatoare
+        // features trestbps, index 3
+        if let Some(&1) = targets.get(i) {
+            positive.push(( current_row[3], 1 ));
+        } else {
+            negative.push(( current_row[3], 0 ))
+        }
+    }
+
+    println!("positive {:?}", positive.len());
+    println!("negative {:?}", negative.len());
+    
+    // Aici imi da eroare pentru ca mie mi-ar trebui f64 in loc de f32 pentru valorile din
+    // current_row
+    let plot_positive = Plot::new(positive)
+        .point_style(
+            PointStyle::new()
+                .size(2.0)
+                .marker(PointMarker::Square)
+                .colour("#00ff00"),
+            )
+        .legend("Trestbps".to_string());
+
+    let plot_negative = Plot::new(negative)
+        .point_style(
+            PointStyle::new()
+                .size(2.0)
+                .marker(PointMarker::Square)
+                .colour("#ff0000"),
+            );
+}
+
 fn main() {
     let dataset = get_dataset();
     println!("{:?}", dataset);
+    plot_data(&dataset);
 
-    let (train, test) = linfa_datasets::iris().split_with_ratio(0.9);
-    println!("{:?} Records", train.records.len());
-    println!("{:?} Targets", test.targets.len());
+    let (train, test) = dataset.split_with_ratio(0.9);
+    println!("{:?} Train records", train.records.len());
+    println!("{:?} Test records", test.targets.len());
 
-    let model = DecisionTree::params().fit(&train).unwrap();
-    let predictions = model.predict(&test);
+    //let model = DecisionTree::params().fit(&train).unwrap();
+    //let predictions = model.predict(&test);
 
-    println!("{:?}", predictions);
-    println!("{:?}", test.targets);
+    //println!("{:?}", predictions);
+    //println!("{:?}", test.targets);
+
 }
 
